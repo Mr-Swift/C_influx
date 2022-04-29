@@ -13,6 +13,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.test.context.junit4.SpringRunner;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @SpringBootTest
 @Configuration
@@ -33,6 +39,13 @@ class CInfluxApplicationTests {
         deleteApi.delete(start,stop,predicate,bucket,org);
     }
 
+
+    @org.junit.Test
+    public void connect() {
+        InfluxDBClient client = this.influxDBClient();
+        System.out.println(client);
+    }
+
     @Test
     void del01() {
         delete("temp_realtime_calculate_result",OffsetDateTime.parse("2022-04-27T13:57:00.000Z"),OffsetDateTime.parse("2022-04-27T13:57:00.001Z"),"_measurement=\"realtime_calculate_result\"");
@@ -44,4 +57,42 @@ class CInfluxApplicationTests {
 
     }
 
+
+    @Test
+    public void clearAll() {
+        OffsetDateTime start = OffsetDateTime.parse("2022-04-01T00:00:00Z");
+        OffsetDateTime stop = OffsetDateTime.parse("2022-05-01T00:00:00Z");
+
+        List<String> bucketNames = new ArrayList<>();
+        bucketNames.add("temp_realtime_calculate_result");
+        bucketNames.add("temp_growth_calculate_result");
+        bucketNames.add("temp_realtime_collection_data");
+        bucketNames.add("forever_realtime_calculate_result");
+        bucketNames.add("forever_growth_calculate_result");
+        bucketNames.add("forever_realtime_collection_data");
+        bucketNames.add("calculate_queue");
+
+        ExecutorService executorService = Executors.newFixedThreadPool(7);
+        final CountDownLatch latch = new CountDownLatch(7);
+
+        bucketNames.forEach(item->{
+            Runnable runnable = new Runnable() {
+                @Override
+                public void run() {
+                    delete(item, start, stop, "");
+                    latch.countDown();
+                }
+            };
+
+            executorService.execute(runnable);
+
+        });
+
+        try {
+            latch.await();
+            executorService.shutdown();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
